@@ -1,10 +1,13 @@
 package dev.aaa1115910.bv.tv.screens.search
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import dev.aaa1115910.bv.tv.screens.main.drawerItemFocusRequesters
+import dev.aaa1115910.bv.tv.screens.main.DrawerItem
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -63,6 +67,8 @@ fun SearchInputScreen(
 
     var enableProxy by remember { mutableStateOf(false) }
 
+    var focusOnContent by remember { mutableStateOf(false) }
+
     val onSearch: (String) -> Unit = { keyword ->
         SearchResultActivity.actionStart(context, keyword, enableProxy)
         searchInputViewModel.keyword = keyword
@@ -73,8 +79,13 @@ fun SearchInputScreen(
         searchInputViewModel.updateSuggests()
     }
 
+    BackHandler(enabled = focusOnContent) {
+        drawerItemFocusRequesters[DrawerItem.Search]?.requestFocus()
+    }
+
     Scaffold(
-        modifier = modifier,
+        modifier = modifier
+            .onFocusChanged { focusOnContent = it.hasFocus },
         topBar = {
             Box(
                 modifier = Modifier.padding(start = 48.dp, top = 24.dp, bottom = 8.dp, end = 48.dp)

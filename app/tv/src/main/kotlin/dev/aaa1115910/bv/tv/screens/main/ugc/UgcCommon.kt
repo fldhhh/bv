@@ -5,6 +5,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.unit.dp
 import dev.aaa1115910.biliapi.entity.CarouselData
 import dev.aaa1115910.biliapi.entity.ugc.UgcItem
@@ -39,6 +41,7 @@ import dev.aaa1115910.biliapi.repositories.UgcRepository
 import dev.aaa1115910.bv.tv.component.UgcCarousel
 import dev.aaa1115910.bv.tv.component.videocard.SmallVideoCard
 import dev.aaa1115910.bv.entity.carddata.VideoCardData
+import dev.aaa1115910.bv.tv.R
 import dev.aaa1115910.bv.tv.activities.video.VideoInfoActivity
 import dev.aaa1115910.bv.util.fInfo
 import dev.aaa1115910.bv.util.toast
@@ -58,44 +61,53 @@ fun UgcRegionScaffold(
     val context = LocalContext.current
     var currentFocusedIndex by remember { mutableIntStateOf(0) }
     val shouldLoadMore by remember {
-        derivedStateOf { currentFocusedIndex + 24 > state.ugcItems.size }
+        derivedStateOf { state.ugcItems.size > 0 && (currentFocusedIndex + 12 > state.ugcItems.size) }
+    }
+    // 初始化数据
+    LaunchedEffect(Unit) {
+        if (!state.dataInitialized || state.ugcItems.isEmpty()) {
+            state.initUgcRegionData()
+        }
     }
 
-    LaunchedEffect(Unit) { if (state.ugcItems.isEmpty()) state.initUgcRegionData() }
+    // 监听滚动位置，加载更多内容
     LaunchedEffect(shouldLoadMore) {
         if (shouldLoadMore) {
             state.loadMore()
-            currentFocusedIndex = -100
         }
     }
 
+    val padding = dimensionResource(R.dimen.grid_padding)
+    val spacedBy = dimensionResource(R.dimen.grid_spacedBy)
+
     LazyColumn(
-        modifier = modifier,
+        modifier = modifier
+            .fillMaxSize(),
         state = state.lazyListState
     ) {
-        if (state.showCarousel) {
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    UgcCarousel(
-                        modifier = Modifier
-                            .width(880.dp)
-                            .padding(32.dp, 0.dp),
-                        data = state.carouselItems,
-                        onClick = { item ->
-                            VideoInfoActivity.actionStart(
-                                context = context,
-                                aid = item.avid!!
-                            )
-                        }
-                    )
-                }
-            }
-        }
+        // if (state.showCarousel) {
+        //     item {
+        //         Row(
+        //             modifier = Modifier
+        //                 .fillMaxWidth()
+        //                 .horizontalScroll(rememberScrollState()),
+        //             horizontalArrangement = Arrangement.Center
+        //         ) {
+        //             UgcCarousel(
+        //                 modifier = Modifier
+        //                     .width(880.dp)
+        //                     .padding(32.dp, 0.dp),
+        //                 data = state.carouselItems,
+        //                 onClick = { item ->
+        //                     VideoInfoActivity.actionStart(
+        //                         context = context,
+        //                         aid = item.avid!!
+        //                     )
+        //                 }
+        //             )
+        //         }
+        //     }
+        // }
 
         if (childRegionButtons != null) {
             item {
@@ -116,8 +128,8 @@ fun UgcRegionScaffold(
             columnCount = 4,
             modifier = Modifier
                 .width(880.dp)
-                .padding(horizontal = 24.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
+                .padding(padding),
+            horizontalArrangement = Arrangement.spacedBy(spacedBy),
             itemContent = { index, item ->
                 SmallVideoCard(
                     data = VideoCardData(
@@ -127,7 +139,8 @@ fun UgcRegionScaffold(
                         play = item.play,
                         danmaku = item.danmaku,
                         upName = item.author,
-                        time = item.duration * 1000L
+                        time = item.duration * 1000L,
+                        pubTime = item.pubTime
                     ),
                     onClick = { VideoInfoActivity.actionStart(context, item.aid) },
                     onFocus = { currentFocusedIndex = index }
@@ -187,70 +200,112 @@ data class UgcScaffoldState(
 ) {
     companion object {
         val logger = KotlinLogging.logger { }
+
+        // 保存每个ugcType的数据状态
+        private val dataCache = mutableMapOf<UgcTypeV2, List<UgcItem>>()
+        private val pageCache = mutableMapOf<UgcTypeV2, UgcFeedPage>()
+
+        // 清除缓存，可以在内存不足或需要重新加载所有数据时调用
+        fun clearCache() {
+            dataCache.clear()
+            pageCache.clear()
+        }
     }
 
-    val carouselItems = mutableStateListOf<CarouselData.CarouselItem>()
+    // val carouselItems = mutableStateListOf<CarouselData.CarouselItem>()
     val ugcItems = mutableStateListOf<UgcItem>()
-    var nextPage by mutableStateOf(UgcFeedPage())
+    var nextPage by mutableStateOf(pageCache[ugcType] ?: UgcFeedPage())
     var hasMore by mutableStateOf(true)
     var updating by mutableStateOf(false)
-    var showCarousel by mutableStateOf(true)
+    var dataInitialized by mutableStateOf(false)
+    // var showCarousel by mutableStateOf(true)
+      init {
+        // 如果有缓存数据，则恢复
+        dataCache[ugcType]?.let { cachedItems ->
+            if (cachedItems.isNotEmpty()) {
+                ugcItems.addAll(cachedItems)
+                dataInitialized = true
+                logger.fInfo { "Restored ${cachedItems.size} items from cache for $ugcType" }
+            }
+        }
+    }
 
     suspend fun initUgcRegionData() {
         loadUgcRegionData()
-        loadMore()
     }
-
     suspend fun loadUgcRegionData() {
         if (!hasMore && updating) return
+        // 如果已经初始化了数据，就不再重新加载
+        if (dataInitialized) {
+            logger.fInfo { "Data already initialized for $ugcType, skip loading" }
+            return
+        }
+
         updating = true
         logger.fInfo { "load ugc $ugcType region data" }
         runCatching {
-            val carouselData = ugcRepository.getCarousel(ugcType)
-            val data = ugcRepository.getRegionFeedRcmd(ugcType, nextPage)
-            carouselItems.clear()
+            val data = withContext(Dispatchers.IO) { ugcRepository.getRegionFeedRcmd(ugcType, nextPage) }
             ugcItems.clear()
-            carouselItems.addAll(carouselData.items)
             ugcItems.addAll(data.items)
             nextPage = data.nextPage
-            showCarousel = carouselItems.isNotEmpty()
+
+            updateCache()
+            dataInitialized = true
+            hasMore = true
+
+            // 初始化后加载更多内容
+            loadMore()
         }.onFailure {
             logger.fInfo { "load $ugcType data failed: ${it.stackTraceToString()}" }
             withContext(Dispatchers.Main) {
                 "加载 $ugcType 数据失败: ${it.message}".toast(context)
             }
+            hasMore = false
+        }.also {
+            updating = false
         }
-        hasMore = true
-        updating = false
     }
 
+    // 将缓存更新逻辑提取为单独的函数
+    private fun updateCache() {
+        dataCache[ugcType] = ugcItems.toList()
+        pageCache[ugcType] = nextPage
+    }
     fun reloadAll() {
         logger.fInfo { "reload all $ugcType data" }
-        scope.launch(Dispatchers.IO) {
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                dataCache.remove(ugcType)
+                pageCache.remove(ugcType)
+            }
+
             nextPage = UgcFeedPage()
             hasMore = true
-            showCarousel = true
-            carouselItems.clear()
             ugcItems.clear()
+            dataInitialized = false
+
+            // 重新初始化数据
             initUgcRegionData()
         }
     }
-
     suspend fun loadMore() {
         if (!hasMore && updating) return
         updating = true
         runCatching {
-            val data = ugcRepository.getRegionFeedRcmd(ugcType, nextPage)
+            val data = withContext(Dispatchers.IO) { ugcRepository.getRegionFeedRcmd(ugcType, nextPage) }
             ugcItems.addAll(data.items)
             nextPage = data.nextPage
             hasMore = data.items.isNotEmpty()
+
+            updateCache()
         }.onFailure {
             logger.fInfo { "load more $ugcType data failed: ${it.stackTraceToString()}" }
             withContext(Dispatchers.Main) {
                 "加载 $ugcType 更多推荐失败: ${it.message}".toast(context)
             }
+        }.also {
+            updating = false
         }
-        updating = false
     }
 }
 
@@ -262,10 +317,8 @@ fun rememberUgcScaffoldState(
     ugcType: UgcTypeV2,
     ugcRepository: UgcRepository = koinInject()
 ): UgcScaffoldState {
+    // 使用ugcType作为key，确保不同类型内容有独立状态
     return remember(
-        context,
-        scope,
-        lazyListState,
         ugcType,
         ugcRepository
     ) {

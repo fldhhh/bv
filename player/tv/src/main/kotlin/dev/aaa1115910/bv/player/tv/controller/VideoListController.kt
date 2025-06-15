@@ -38,6 +38,7 @@ import dev.aaa1115910.bv.player.entity.VideoListPgcEpisode
 import dev.aaa1115910.bv.player.entity.VideoListUgcEpisode
 import dev.aaa1115910.bv.player.entity.VideoListUgcEpisodeTitle
 import dev.aaa1115910.bv.util.requestFocus
+import kotlinx.coroutines.delay
 
 @Composable
 fun VideoListController(
@@ -55,26 +56,24 @@ fun VideoListController(
         }
     }
 
-    LaunchedEffect(show) {
-        if (show) {
-            val currentIndex = videoPlayerConfigData.availableVideoList
-                .indexOfFirst {
-                    when (it) {
-                        is VideoListItemData -> it.cid == videoPlayerConfigData.currentVideoCid
-                        else -> false
-                    }
-                }
-            listState.animateScrollToItem(currentIndex)
-            focusRequester.requestFocus(scope)
-        }
-    }
-
     Box {
         AnimatedVisibility(
             visible = show,
             enter = expandHorizontally(),
             exit = shrinkHorizontally()
         ) {
+            // 在动画内容中处理滚动和焦点请求
+            LaunchedEffect(Unit) {
+                val currentIndex = videoPlayerConfigData.availableVideoList
+                    .indexOfFirst {
+                        when (it) {
+                            is VideoListItemData -> it.cid == videoPlayerConfigData.currentVideoCid
+                            else -> false
+                        }
+                    }
+                listState.animateScrollToItem(currentIndex)
+                focusRequester.requestFocus(scope)
+            }
             Surface(
                 modifier = modifier,
                 colors = SurfaceDefaults.colors(
@@ -109,7 +108,7 @@ fun VideoListController(
                                         modifier = itemModifier,
                                         headlineContent = {
                                             Text(text = (" - ".takeIf { videoListContainsUgcEpisode }
-                                                ?: "") + "P${video.index + 1} ${video.title}")
+                                                ?: "") + "P${video.index + 1} ${if (video.partTitle.isNotEmpty()) video.partTitle else video.title}")
                                         },
                                         onClick = { if (!isSelected) onPlayNewVideo(video) },
                                         selected = isSelected
@@ -128,7 +127,7 @@ fun VideoListController(
                                     }
                                     ListItem(
                                         modifier = itemModifier,
-                                        headlineContent = { Text(text = "EP${video.index + 1} ${video.title}") },
+                                        headlineContent = { Text(text = "EP${video.index + 1} ${if (video.partTitle.isNotEmpty()) video.partTitle else video.title}") },
                                         onClick = { if (!isSelected) onPlayNewVideo(video) },
                                         selected = isSelected
                                     )
@@ -146,7 +145,7 @@ fun VideoListController(
                                     }
                                     ListItem(
                                         modifier = itemModifier,
-                                        headlineContent = { Text(text = video.title) },
+                                        headlineContent = { Text(text = video.partTitle) },
                                         onClick = { if (!isSelected) onPlayNewVideo(video) },
                                         selected = isSelected
                                     )

@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.aaa1115910.biliapi.entity.ugc.toSmartDate
 import dev.aaa1115910.biliapi.http.entity.AuthFailureException
 import dev.aaa1115910.biliapi.repositories.HistoryRepository
 import dev.aaa1115910.bv.BVApp
@@ -50,7 +51,9 @@ class HistoryViewModel(
     private suspend fun updateHistories(context: Context = BVApp.context) {
         if (updating || noMore) return
         logger.fInfo { "Updating histories with params [cursor=$cursor, apiType=${Prefs.apiType}]" }
-        updating = true
+        withContext(Dispatchers.Main) {
+            updating = true
+        }
         runCatching {
             val data = historyRepository.getHistories(
                 cursor = cursor,
@@ -69,7 +72,8 @@ class HistoryViewModel(
                             R.string.play_time_history,
                             (historyItem.progress * 1000L).formatMinSec(),
                             (historyItem.duration * 1000L).formatMinSec()
-                        )
+                        ),
+                        pubTime = historyItem.viewAt.toSmartDate() + context.getString(R.string.view_at)
                     )
                 )
             }
@@ -96,6 +100,8 @@ class HistoryViewModel(
                 else -> {}
             }
         }
-        updating = false
+        withContext(Dispatchers.Main) {
+            updating = false
+        }
     }
 }

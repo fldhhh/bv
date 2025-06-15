@@ -56,6 +56,7 @@ import dev.aaa1115910.bv.util.toast
 import io.github.g0dkar.qrcode.QRCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -84,7 +85,10 @@ fun LogsScreen(
             val url = "http://$host:$port/api/logs/${currentSelectFile?.name}"
             QRCode(url).render().writeImage(output)
             val input = ByteArrayInputStream(output.toByteArray())
-            qrImage = BitmapFactory.decodeStream(input).asImageBitmap()
+            var newQrImage = BitmapFactory.decodeStream(input).asImageBitmap()
+            withContext(Dispatchers.Main) {
+                qrImage = newQrImage
+            }
         }
     }
 

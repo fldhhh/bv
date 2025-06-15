@@ -8,6 +8,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -58,6 +59,7 @@ import dev.aaa1115910.bv.tv.screens.main.ugc.VlogContent
 import dev.aaa1115910.bv.tv.screens.main.ugc.rememberUgcScaffoldState
 import dev.aaa1115910.bv.util.fInfo
 import dev.aaa1115910.bv.util.requestFocus
+import dev.aaa1115910.bv.util.rememberDebouncer
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -100,57 +102,74 @@ fun UgcContent(
 ) {
     val scope = rememberCoroutineScope()
     val logger = KotlinLogging.logger("UgcContent")
-
-    var selectedTab by remember { mutableStateOf(UgcTopNavItem.Douga) }
     var focusOnContent by remember { mutableStateOf(false) }
+    var topNavHasFocus by remember { mutableStateOf(false) }
+    // 用于控制Tab选择后的延迟加载的防抖器（自动管理生命周期）
+    val tabSelectionDebouncer = rememberDebouncer<UgcTopNavItem>(280L)
+
+    // 使用remember的key参数确保只有在DrawerItem.UGC的tab状态变化时才重新计算
+    val initialSelectedTabIndex = currentSelectedTabs[DrawerItem.UGC]
+    var selectedTab by remember(initialSelectedTabIndex) {
+        mutableStateOf(
+            initialSelectedTabIndex
+                ?.let { UgcTopNavItem.entries.getOrNull(it) }
+                ?: UgcTopNavItem.Douga
+        )
+    }
+
+    // 当选中标签变化时，保存到全局状态
+    LaunchedEffect(selectedTab) {
+        currentSelectedTabs[DrawerItem.UGC] = selectedTab.ordinal
+    }
 
     //启动时刷新数据
     LaunchedEffect(Unit) {
 
     }
 
-    BackHandler(focusOnContent) {
+    BackHandler(focusOnContent || topNavHasFocus) {
         logger.fInfo { "onFocusBackToNav" }
-        navFocusRequester.requestFocus(scope)
-        // scroll to top
-        scope.launch(Dispatchers.Main) {
-            when (selectedTab) {
-                UgcTopNavItem.Douga -> dougaState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Game -> gameState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Kichiku -> kichikuState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Music -> musicState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Dance -> danceState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Cinephile -> cinephileState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Ent -> entState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Knowledge -> knowledgeState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Tech -> techState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Information -> informationState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Food -> foodState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.ShortPlay -> shortPlayState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Car -> carState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Fashion -> fashionState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Sports -> sportsState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Animal -> animalState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Vlog -> vlogState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Painting -> paintingState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Ai -> aiState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Home -> homeState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Outdoors -> outdoorsState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Gym -> gymState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Handmake -> handmakeState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Travel -> travelState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Rural -> ruralState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Parenting -> parentingState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Health -> healthState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.Emotion -> emotionState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.LifeJoy -> lifeJoyState.lazyListState.animateScrollToItem(0)
-                UgcTopNavItem.LifeExperience -> lifeExperienceState.lazyListState.animateScrollToItem(
-                    0
-                )
-
-                UgcTopNavItem.Mysticism -> mysticismState.lazyListState.animateScrollToItem(0)
-            }
+        if (topNavHasFocus) {
+            drawerItemFocusRequesters[DrawerItem.UGC]?.requestFocus()
+            return@BackHandler
         }
+        navFocusRequester.requestFocus(scope)
+        // // scroll to top
+        // scope.launch(Dispatchers.Main) {
+        //     when (selectedTab) {
+        //         UgcTopNavItem.Douga -> dougaState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Game -> gameState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Kichiku -> kichikuState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Music -> musicState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Dance -> danceState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Cinephile -> cinephileState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Ent -> entState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Knowledge -> knowledgeState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Tech -> techState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Information -> informationState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Food -> foodState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.ShortPlay -> shortPlayState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Car -> carState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Fashion -> fashionState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Sports -> sportsState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Animal -> animalState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Vlog -> vlogState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Painting -> paintingState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Ai -> aiState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Home -> homeState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Outdoors -> outdoorsState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Gym -> gymState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Handmake -> handmakeState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Travel -> travelState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Rural -> ruralState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Parenting -> parentingState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Health -> healthState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Emotion -> emotionState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.LifeJoy -> lifeJoyState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.LifeExperience -> lifeExperienceState.lazyListState.animateScrollToItem(0)
+        //         UgcTopNavItem.Mysticism -> mysticismState.lazyListState.animateScrollToItem(0)
+        //     }
+        // }
     }
 
     Scaffold(
@@ -158,11 +177,15 @@ fun UgcContent(
         topBar = {
             TopNav(
                 modifier = Modifier
-                    .focusRequester(navFocusRequester),
+                    .focusRequester(navFocusRequester)
+                    .onFocusChanged { topNavHasFocus = it.hasFocus },
                 items = UgcTopNavItem.entries,
                 isLargePadding = !focusOnContent,
+                initialSelectedItem = selectedTab,
                 onSelectedChanged = { nav ->
-                    selectedTab = nav as UgcTopNavItem
+                    tabSelectionDebouncer.debounce(scope, nav as UgcTopNavItem) { selectedNavItem ->
+                        selectedTab = selectedNavItem
+                    }
                 },
                 onClick = { nav ->
                     when (nav) {
@@ -198,6 +221,10 @@ fun UgcContent(
                         UgcTopNavItem.LifeExperience -> lifeExperienceState.reloadAll()
                         UgcTopNavItem.Mysticism -> mysticismState.reloadAll()
                     }
+                },
+                onLeftKeyEvent = {
+                    // 顶部栏最左侧按左键时，跳转到左侧导航栏
+                    drawerItemFocusRequesters[DrawerItem.UGC]?.requestFocus()
                 }
             )
         }
@@ -205,20 +232,14 @@ fun UgcContent(
         Box(
             modifier = Modifier
                 .padding(innerPadding)
+                .fillMaxSize()
                 .onFocusChanged { focusOnContent = it.hasFocus }
         ) {
             AnimatedContent(
                 targetState = selectedTab,
                 label = "ugc animated content",
                 transitionSpec = {
-                    val coefficient = 10
-                    if (targetState.ordinal < initialState.ordinal) {
-                        fadeIn() + slideInHorizontally { -it / coefficient } togetherWith
-                                fadeOut() + slideOutHorizontally { it / coefficient }
-                    } else {
-                        fadeIn() + slideInHorizontally { it / coefficient } togetherWith
-                                fadeOut() + slideOutHorizontally { -it / coefficient }
-                    }
+                    fadeIn() togetherWith fadeOut()
                 }
             ) { screen ->
                 when (screen) {

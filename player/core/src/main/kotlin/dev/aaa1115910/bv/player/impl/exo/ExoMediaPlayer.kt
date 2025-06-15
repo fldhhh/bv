@@ -8,6 +8,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.Renderer
@@ -18,6 +19,16 @@ import dev.aaa1115910.bv.player.AbstractVideoPlayer
 import dev.aaa1115910.bv.player.OkHttpUtil
 import dev.aaa1115910.bv.player.VideoPlayerOptions
 import dev.aaa1115910.bv.util.formatMinSec
+
+/**
+ * 智能缓冲配置
+ */
+private data class BufferConfig(
+    val minBufferMs: Int,
+    val maxBufferMs: Int,
+    val backBufferMs: Int,
+    val targetBufferBytes: Int
+)
 
 @OptIn(UnstableApi::class)
 class ExoMediaPlayer(
@@ -48,11 +59,30 @@ class ExoMediaPlayer(
                 }
             )
         }
+
+        // 创建智能缓冲策略，根据设备性能和视频质量动态调整
+        val bufferConfig = calculateSmartBufferConfig()
+        val loadControl = DefaultLoadControl.Builder()
+            // 动态设置缓冲区大小
+            .setBufferDurationsMs(
+                bufferConfig.minBufferMs, // 最小缓冲时间
+                bufferConfig.maxBufferMs, // 最大缓冲时间
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS, // 开始播放前的缓冲时间
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS // 重新缓冲后的播放缓冲
+            )
+            // 优先考虑缓冲大小
+            .setPrioritizeTimeOverSizeThresholds(false)
+            // 根据系统内存计算缓冲区大小
+            .setTargetBufferBytes(bufferConfig.targetBufferBytes)
+            .setBackBuffer(bufferConfig.backBufferMs, true) // 动态回退缓冲
+            .build()
+
         mPlayer = ExoPlayer
             .Builder(context)
             .setRenderersFactory(renderersFactory)
+            .setLoadControl(loadControl)
             .setSeekForwardIncrementMs(1000 * 10)
-            .setSeekBackIncrementMs(1000 * 5)
+            .setSeekBackIncrementMs(1000 * 10)
             .build()
 
         initListener()
@@ -112,7 +142,13 @@ class ExoMediaPlayer(
     }
 
     override fun release() {
-        mPlayer?.release()
+        try {
+            mPlayer?.release()
+            mPlayer = null
+            mMediaSource = null
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     override val currentPosition: Long
@@ -190,5 +226,73 @@ class ExoMediaPlayer(
 
     override fun onPlayerError(error: PlaybackException) {
         mPlayerEventListener?.onError(error)
+    }
+
+    /**
+     * 计算智能缓冲配置
+     * 根据设备性能、可用内存和预期视频质量动态调整缓冲策略
+     */
+    private fun calculateSmartBufferConfig(): BufferConfig {
+        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        val memoryInfo = android.app.ActivityManager.MemoryInfo()
+        activityManager.getMemoryInfo(memoryInfo)
+
+        // 获取当前可用内存（以字节为单位）
+        val availableMemory = memoryInfo.availMem
+        val totalMemory = memoryInfo.totalMem
+        val isLowRam = activityManager.isLowRamDevice
+
+        // 根据设备性能等级调整策略
+        val deviceTier = when {
+            isLowRam || totalMemory < 3L * 1024 * 1024 * 1024 -> DeviceTier.LOW // 低端设备：小于3GB RAM
+            totalMemory < 6L * 1024 * 1024 * 1024 -> DeviceTier.MID // 中端设备：3-6GB RAM
+            else -> DeviceTier.HIGH // 高端设备：6GB+ RAM
+        }
+        return when (deviceTier) {
+            DeviceTier.LOW -> BufferConfig(
+                minBufferMs = 12000,  // 12秒最小缓冲
+                maxBufferMs = 22000,  // 22秒最大缓冲
+                backBufferMs = 0, // 0秒回退缓冲
+                targetBufferBytes = calculateBufferSize(availableMemory, 0.08, 5, 50) // 8%内存，5-50MB
+            )
+            DeviceTier.MID -> BufferConfig(
+                minBufferMs = 16000,  // 16秒最小缓冲
+                maxBufferMs = 25000,  // 25秒最大缓冲
+                backBufferMs = 12000, // 12秒回退缓冲
+                targetBufferBytes = calculateBufferSize(availableMemory, 0.13, 5, 150) // 12%内存，5-150MB
+            )
+            DeviceTier.HIGH -> BufferConfig(
+                minBufferMs = 20000,  // 20秒最小缓冲
+                maxBufferMs = 32000,  // 32秒最大缓冲
+                backBufferMs = 12000, // 12秒回退缓冲
+                targetBufferBytes = calculateBufferSize(availableMemory, 0.18, 5, 300) // 16%内存，5-200MB
+            )
+        }
+    }
+
+    /**
+     * 设备性能等级
+     */
+    private enum class DeviceTier {
+        LOW, MID, HIGH
+    }
+
+    /**
+     * 计算缓冲区大小
+     */
+    private fun calculateBufferSize(
+        availableMemory: Long,
+        memoryRatio: Double,
+        minMB: Int,
+        maxMB: Int
+    ): Int {
+        val calculatedSize = (availableMemory * memoryRatio).toLong()
+        val minSize = minMB * 1024 * 1024L
+        val maxSize = maxMB * 1024 * 1024L
+
+        return when {
+            calculatedSize < minSize -> minSize.toInt()
+            calculatedSize > maxSize -> maxSize.toInt()
+            else -> calculatedSize.toInt()        }
     }
 }

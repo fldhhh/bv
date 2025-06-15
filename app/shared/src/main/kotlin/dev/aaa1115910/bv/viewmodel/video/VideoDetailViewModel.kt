@@ -58,7 +58,8 @@ class VideoDetailViewModel(
         runCatching {
             val historyData = videoDetailRepository.getVideoDetail(
                 aid = aid,
-                preferApiType = Prefs.apiType
+                preferApiType = Prefs.apiType,
+                withoutUserActions = true
             ).history
             withContext(Dispatchers.Main) { videoDetail?.history = historyData }
         }.onFailure {
@@ -80,7 +81,8 @@ class VideoDetailViewModel(
                 play = it.view,
                 danmaku = it.danmaku,
                 jumpToSeason = it.jumpToSeason,
-                epId = it.epid
+                epId = it.epid,
+                pubTime = it.pubTime
             )
         } ?: emptyList()
         relatedVideos.swapListWithMainContext(relateVideoCardDataList)
@@ -96,7 +98,8 @@ class VideoDetailViewModel(
                     VideoListPart(
                         aid = aid,
                         cid = videoPage.cid,
-                        title = videoPage.title,
+                        title = videoDetail!!.title,
+                        partTitle = videoPage.title,
                         index = index,
                     )
                 }
@@ -114,7 +117,8 @@ class VideoDetailViewModel(
                         VideoListUgcEpisode(
                             aid = episode.aid,
                             cid = videoPage.cid,
-                            title = videoPage.title,
+                            title = episode.title,
+                            partTitle = "",
                             index = epIndex
                         )
                     )
@@ -131,7 +135,8 @@ class VideoDetailViewModel(
                         VideoListPart(
                             aid = episode.aid,
                             cid = videoPage.cid,
-                            title = videoPage.title,
+                            title = episode.title,
+                            partTitle = videoPage.title,
                             index = pageIndex,
                         )
                     )

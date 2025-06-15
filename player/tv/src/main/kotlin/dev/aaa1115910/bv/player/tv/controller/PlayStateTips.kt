@@ -40,6 +40,7 @@ import dev.aaa1115910.bv.player.entity.LocalVideoPlayerStateData
 import io.github.g0dkar.qrcode.QRCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 
@@ -181,7 +182,10 @@ fun PaidRequireTip(
                 )
                 .writeImage(output)
             val input = ByteArrayInputStream(output.toByteArray())
-            qrImage = BitmapFactory.decodeStream(input).asImageBitmap()
+            val newQrImage = BitmapFactory.decodeStream(input).asImageBitmap()
+            withContext(Dispatchers.Main) {
+                qrImage = newQrImage
+            }
         }
     }
     Surface(
